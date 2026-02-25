@@ -65,8 +65,19 @@ def poll_emails():
         try:
             results = gmail_service.users().labels().list(userId='me').execute()
             ai_processed_id = next((l['id'] for l in results.get('labels', []) if l['name'] == 'AI Processed'), None)
-        except Exception:
-            pass
+            
+            if not ai_processed_id:
+                print("Label 'AI Processed' not found in Gmail. Creating it...")
+                label_object = {
+                    'name': 'AI Processed',
+                    'labelListVisibility': 'labelShow',
+                    'messageListVisibility': 'hide'
+                }
+                new_label = gmail_service.users().labels().create(userId='me', body=label_object).execute()
+                ai_processed_id = new_label['id']
+                print(f"Created 'AI Processed' label: {ai_processed_id}")
+        except Exception as e:
+            print(f"Failed to lookup or create AI Processed label: {e}")
             
     # Read Drive Root ID
     drive_root_id = None
@@ -399,9 +410,25 @@ def process_single_email(msg_id, gmail_service, drive_service, creds, labels_map
                 print(f"Failed to apply AI Processed label, attempting dynamic lookup: {e}")
                 results = gmail_service.users().labels().list(userId='me').execute()
                 real_ai_processed = next((l for l in results.get('labels', []) if l['name'] == 'AI Processed'), None)
+                
+                if not real_ai_processed:
+                    print("Re-creating missing 'AI Processed' label...")
+                    try:
+                        label_object = {
+                            'name': 'AI Processed',
+                            'labelListVisibility': 'labelShow',
+                            'messageListVisibility': 'hide'
+                        }
+                        real_ai_processed = gmail_service.users().labels().create(userId='me', body=label_object).execute()
+                    except Exception as creation_err:
+                        print(f"Failed to re-create label: {creation_err}")
+
                 if real_ai_processed:
-                    gmail_service.users().messages().modify(userId='me', id=msg_id, body={'addLabelIds': [real_ai_processed['id']]}).execute()
-                    print(f"Successfully marked {msg_id} as AI Processed on retry.")
+                    try:
+                        gmail_service.users().messages().modify(userId='me', id=msg_id, body={'addLabelIds': [real_ai_processed['id']]}).execute()
+                        print(f"Successfully marked {msg_id} as AI Processed on retry.")
+                    except Exception as apply_err:
+                        print(f"Critical error applying AI Processed label: {apply_err}")
             
     except Exception as e:
         print(f"Failed processing {msg_id}: {e}")
