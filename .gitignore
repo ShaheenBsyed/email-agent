@@ -1,0 +1,13 @@
+# Ignore temporary processing files
+.tmp/
+
+# Ignore secrets and environment variables
+.env
+credentials.json
+token.json
+modal_secret.json 
+.env 
+.env.example 
+token.json 
+credentials.json 
+*.json 
