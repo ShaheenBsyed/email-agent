@@ -203,7 +203,9 @@ def classify_email(subject, body, instructions):
     You are an AI Email assistant with the ability to dynamically categorize emails.
     Disregard any Ignore-Sender rules for this specific task.
     Classify the following email into the MOST APPROPRIATE category. 
-    You may use standard categories (e.g., 'Personal', 'Accounting', 'Social', 'Promotional', 'Sales', 'Recruitment') OR invent a concise, relevant new category name (max 2 words) if the email is highly specific and doesn't fit the standards.
+    You MUST output EXACTLY ONE of these standard categories if it fits: 'Personal', 'Accounting', 'Social', 'Promotional', 'Sales', 'Recruitment', or 'Misc'.
+    Do NOT combine categories (e.g., do not output "Misc/Sales" or "Social/Promotional"). Pick the single best fit.
+    Only if the email is highly specific and sits completely outside these standards, you may invent a concise, relevant new category name (max 2 words).
     
     INSTRUCTIONS: {instructions}
     
@@ -369,9 +371,13 @@ def process_single_email(msg_id, gmail_service, drive_service, creds, labels_map
                     # Fallback to Misc if creation fails
                     cat_label_id = labels_map.get('misc')
             
+            # If we still don't have a cat_label_id (e.g. Misc doesn't exist either), just skip applying the category label
             if cat_label_id:
-                gmail_service.users().messages().modify(userId='me', id=msg_id, body={'addLabelIds': [cat_label_id]}).execute()
-                print(f"Applied label {category} ({cat_label_id})")
+                try:
+                    gmail_service.users().messages().modify(userId='me', id=msg_id, body={'addLabelIds': [cat_label_id]}).execute()
+                    print(f"Applied label {category} ({cat_label_id})")
+                except Exception as apply_err:
+                    print(f"Failed to apply label {cat_label_id} to message: {apply_err}")
         
         # ALWAYS Cleanup
         if ai_processed_id:
