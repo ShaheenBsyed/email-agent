@@ -368,8 +368,19 @@ def process_single_email(msg_id, gmail_service, drive_service, creds, labels_map
                     print(f"Successfully created dynamic label '{category}' ({cat_label_id})")
                 except Exception as label_err:
                     print(f"Warning: Failed to create dynamic label '{category}': {label_err}")
-                    # Fallback to Misc if creation fails
-                    cat_label_id = labels_map.get('misc')
+                    if "409" in str(label_err) or "exists" in str(label_err).lower():
+                        try:
+                            results = gmail_service.users().labels().list(userId='me').execute()
+                            existing = next((l for l in results.get('labels', []) if l['name'].lower() == category_lower), None)
+                            if existing:
+                                cat_label_id = existing['id']
+                                labels_map[category_lower] = cat_label_id
+                                print(f"Recovered existing label {category} ({cat_label_id}) from Gmail API")
+                        except Exception:
+                            pass
+                    if not cat_label_id:
+                        # Fallback to Misc if creation fails
+                        cat_label_id = labels_map.get('misc')
             
             # If we still don't have a cat_label_id (e.g. Misc doesn't exist either), just skip applying the category label
             if cat_label_id:
@@ -381,8 +392,16 @@ def process_single_email(msg_id, gmail_service, drive_service, creds, labels_map
         
         # ALWAYS Cleanup
         if ai_processed_id:
-            gmail_service.users().messages().modify(userId='me', id=msg_id, body={'addLabelIds': [ai_processed_id]}).execute()
-            print(f"Marked {msg_id} as AI Processed.")
+            try:
+                gmail_service.users().messages().modify(userId='me', id=msg_id, body={'addLabelIds': [ai_processed_id]}).execute()
+                print(f"Marked {msg_id} as AI Processed.")
+            except Exception as e:
+                print(f"Failed to apply AI Processed label, attempting dynamic lookup: {e}")
+                results = gmail_service.users().labels().list(userId='me').execute()
+                real_ai_processed = next((l for l in results.get('labels', []) if l['name'] == 'AI Processed'), None)
+                if real_ai_processed:
+                    gmail_service.users().messages().modify(userId='me', id=msg_id, body={'addLabelIds': [real_ai_processed['id']]}).execute()
+                    print(f"Successfully marked {msg_id} as AI Processed on retry.")
             
     except Exception as e:
         print(f"Failed processing {msg_id}: {e}")
