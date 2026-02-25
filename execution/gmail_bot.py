@@ -92,7 +92,7 @@ def poll_emails():
     
     # 2. ZERO-DUPLICATE POLLING
     twenty_mins_ago = int((datetime.now() - timedelta(minutes=20)).timestamp())
-    query = f'in:inbox -label:"AI Processed" after:{twenty_mins_ago}'
+    query = f'label:INBOX -label:"AI Processed" after:{twenty_mins_ago}'
     
     print(f"Polling with query: {query}")
     try:
